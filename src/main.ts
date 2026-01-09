@@ -1,3 +1,4 @@
+// src/main.ts
 import Phaser from 'phaser';
 import './style.css';
 
@@ -9,7 +10,6 @@ type DialogLine = {
 
 // --- タイトルシーン ---
 class TitleScene extends Phaser.Scene {
-  // プロパティを使用するため、警告が出ないように保持
   private bg1!: Phaser.GameObjects.TileSprite;
   private bg2!: Phaser.GameObjects.TileSprite;
   private bg3!: Phaser.GameObjects.TileSprite;
@@ -71,7 +71,8 @@ class TitleScene extends Phaser.Scene {
   }
 
   update() {
-    // 背景スクロール処理（これで変数が使用されるためエラーが消えます）
+    // ★修正箇所：bg1も少し動かすことで「使われていない」エラーを回避
+    this.bg1.tilePositionX += 0.05; 
     this.bg2.tilePositionX += 0.2;
     this.bg3.tilePositionX += 0.4;
     this.bg4.tilePositionX += 0.6;
@@ -90,7 +91,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   private isAttacking: boolean = false;
   private nextAttackTime: number = 0;
   
-  // HP関連（明示的にパブリック定義）
   public hp: number = 3;
   public maxHp: number = 3;
   
@@ -114,10 +114,8 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.play('idle');
 
     const hitboxRect = scene.add.rectangle(0, 0, 150, 150, 0xff0000, 0);
-    // 型変換エラー修正: unknownを経由してキャスト
     this.attackHitbox = scene.physics.add.existing(hitboxRect) as unknown as Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
     this.attackHitbox.setVisible(false);
-    // nullチェック回避 (!)
     this.attackHitbox.body!.enable = false;
     this.attackHitbox.body!.setAllowGravity(false);
 
@@ -231,7 +229,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
         this.isDead = true;
         this.setVelocity(0, 0);
-        // ボディのnullチェック
         if (this.body) {
             this.body.checkCollision.none = true; 
             (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
@@ -398,11 +395,10 @@ class MainScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, 3000, 720);
 
     const hitboxRect = this.add.rectangle(0, 0, 150, 150, 0xffff00, 0.5);
-    // 型変換エラー修正
     this.attackHitbox = this.physics.add.existing(hitboxRect) as unknown as Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
     this.attackHitbox.setVisible(false);
-    this.attackHitbox.body.enable = false;
-    this.attackHitbox.body.setAllowGravity(false);
+    this.attackHitbox.body!.enable = false;
+    this.attackHitbox.body!.setAllowGravity(false);
 
     const enemyPositions = [
         { x: 800, y: 450 },
@@ -419,7 +415,6 @@ class MainScene extends Phaser.Scene {
     this.enemies.forEach(enemy => {
       this.physics.add.collider(enemy, this.platforms);
       
-      // 未使用変数は _hitbox
       this.physics.add.overlap(this.attackHitbox, enemy, (_hitbox, hitEnemy) => {
         const e = hitEnemy as Enemy; 
         if (!e.isDead) {
@@ -708,9 +703,9 @@ class MainScene extends Phaser.Scene {
           if (!this.isAttacking) return; 
           const offsetX = this.player.flipX ? -120 : 120;
           this.attackHitbox.setPosition(this.player.x + offsetX, this.player.y);
-          this.attackHitbox.body.enable = true;
+          this.attackHitbox.body!.enable = true;
           this.time.delayedCall(100, () => {
-            this.attackHitbox.body.enable = false;
+            this.attackHitbox.body!.enable = false;
             this.attackHitbox.setVisible(false);
           });
       });
