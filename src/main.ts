@@ -69,7 +69,6 @@ class TitleScene extends Phaser.Scene {
 
     this.input.on('pointerdown', () => {
       this.sound.play('se_attack', { volume: 1.5 }); 
-      // ★開始時に振動（バイブレーションAPI）
       if (navigator.vibrate) navigator.vibrate(50);
       
       this.cameras.main.fadeOut(500, 0, 0, 0);
@@ -116,7 +115,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
     this.setBounce(0);
     this.body!.setSize(40, 60);
-    this.body!.setOffset(80, 60); // 接地調整
+    this.body!.setOffset(80, 60); 
     
     this.setDepth(1);
     this.play('idle');
@@ -234,13 +233,9 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp--;
     this.drawHealthBar();
 
-    // ★ダメージ演出：血しぶき
+    // ダメージ演出
     (this.scene as MainScene).createBloodEffect(this.x, this.y);
-    
-    // ★ヒットストップ（小）
     (this.scene as MainScene).triggerHitStop(50);
-    
-    // ★振動（小）
     (this.scene as MainScene).triggerVibration(30);
 
     if (this.hp <= 0) {
@@ -258,7 +253,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   protected die() {
     (this.scene as MainScene).addScore(100);
     
-    // ★トドメ演出：ヒットストップ（大）、振動（大）
     (this.scene as MainScene).triggerHitStop(150);
     (this.scene as MainScene).triggerVibration(100);
 
@@ -311,10 +305,9 @@ class BossEnemy extends Enemy {
     protected die() {
         (this.scene as MainScene).addScore(1000);
         
-        // ★ボス撃破演出：超ヒットストップ
         (this.scene as MainScene).triggerHitStop(300);
         (this.scene as MainScene).triggerVibration(500);
-        (this.scene as MainScene).cameras.main.flash(500, 255, 255, 255); // 白フラッシュ
+        (this.scene as MainScene).cameras.main.flash(500, 255, 255, 255);
 
         this.isDead = true;
         this.setVelocity(0, 0);
@@ -387,7 +380,7 @@ class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    // --- 画像読み込み ---
+    // 画像
     this.load.spritesheet('player_idle', '/assets/Idle.png', { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet('player_run', '/assets/Run.png', { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet('player_jump', '/assets/Jump.png', { frameWidth: 200, frameHeight: 200 });
@@ -404,11 +397,12 @@ class MainScene extends Phaser.Scene {
     this.load.audio('se_hit', '/assets/sounds/hit.mp3');
     this.load.audio('se_jump', '/assets/sounds/jump.mp3');
 
-    // ★パーティクル用の「白い四角」をプログラムで生成
-    const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+    // ★修正：パーティクル用の「白い四角」生成（add: false を削除）
+    const graphics = this.make.graphics({ x: 0, y: 0 });
     graphics.fillStyle(0xffffff);
     graphics.fillRect(0, 0, 4, 4); // 4x4のドット
     graphics.generateTexture('pixel', 4, 4);
+    graphics.destroy(); // 生成したら消す
   }
 
   create() {
@@ -544,21 +538,17 @@ class MainScene extends Phaser.Scene {
     });
   }
 
-  // --- ★ジューシーさを出すためのヘルパー関数 ---
+  // --- ヘルパー関数 ---
 
-  // 1. 振動 (Haptic)
   triggerVibration(duration: number) {
       if (navigator.vibrate) {
           navigator.vibrate(duration);
       }
   }
 
-  // 2. ヒットストップ (Hit Stop)
   triggerHitStop(duration: number) {
-      // 物理演算とアニメーションを一時停止
       this.physics.world.pause();
       this.anims.pauseAll();
-      
       this.time.delayedCall(duration, () => {
           if (this.scene.isActive()) {
               this.physics.world.resume();
@@ -567,11 +557,10 @@ class MainScene extends Phaser.Scene {
       });
   }
 
-  // 3. 血しぶきエフェクト (Particles)
   createBloodEffect(x: number, y: number) {
       const particles = this.add.particles(x, y, 'pixel', {
           speed: { min: 100, max: 300 },
-          angle: { min: 200, max: 340 }, // 上方向に噴き出す
+          angle: { min: 200, max: 340 },
           scale: { start: 2, end: 0 },
           color: [0xcc0000, 0x990000],
           lifespan: 600,
@@ -580,11 +569,9 @@ class MainScene extends Phaser.Scene {
           emitting: false
       });
       particles.explode(15, x, y);
-      // 自動で消すのは設定できないため、少し経ったらdestroy
       this.time.delayedCall(1000, () => particles.destroy());
   }
 
-  // 4. パリィの火花 (Spark)
   createSparkEffect(x: number, y: number) {
       const particles = this.add.particles(x, y, 'pixel', {
           speed: 400,
@@ -643,17 +630,17 @@ class MainScene extends Phaser.Scene {
       this.setupEnemyCollision(boss);
       
       this.cameras.main.shake(500, 0.01); 
-      this.triggerVibration(200); // 登場振動
+      this.triggerVibration(200); 
   }
 
   setupEnemyCollision(enemy: Enemy) {
       this.physics.add.collider(enemy, this.platforms);
       
+      // 未使用引数はアンダースコアでエラー回避
       this.physics.add.overlap(this.attackHitbox, enemy, (_hitbox, hitEnemy) => {
         const e = hitEnemy as Enemy; 
         if (!e.isDead) {
           e.takeDamage();
-          // メインシーン側でカメラシェイク管理
           this.cameras.main.shake(100, 0.01); 
         }
       }, undefined, this);
@@ -669,7 +656,6 @@ class MainScene extends Phaser.Scene {
       this.score += points;
       this.scoreText.setText(`Score: ${this.score}`);
       
-      // スコアが弾むアニメーション（UI Bounce）
       this.tweens.add({
           targets: this.scoreText,
           scale: 1.5,
@@ -738,20 +724,17 @@ class MainScene extends Phaser.Scene {
 
         if (blockDuration < 200) {
             this.showParryEffect(this.player.x, this.player.y);
-            this.createSparkEffect(this.player.x + 50, this.player.y); // ★火花追加
+            this.createSparkEffect(this.player.x + 50, this.player.y);
             this.sound.play('se_hit', { volume: 2.0, rate: 2.0 }); 
             this.addScore(500);
-            
-            // ★パリィ成功時：強めの振動とヒットストップ
             this.triggerVibration(50);
             this.triggerHitStop(100);
-            this.cameras.main.flash(100, 255, 255, 200); // 白い閃光
-
+            this.cameras.main.flash(100, 255, 255, 200); 
             enemy.getStunned();
             return;
         } else {
             this.sound.play('se_hit', { volume: 1.0, rate: 0.5 });
-            this.triggerVibration(20); // ガード時：軽い振動
+            this.triggerVibration(20); 
             const direction = this.player.x < enemy.x ? -1 : 1;
             this.player.setVelocityX(200 * direction);
             return;
@@ -761,11 +744,9 @@ class MainScene extends Phaser.Scene {
     this.hp -= 20; 
     this.drawPlayerHealthBar();
     this.sound.play('se_hit', { volume: 1.0 });
-    
-    // ★被弾時：血しぶき、赤フラッシュ、振動
     this.createBloodEffect(this.player.x, this.player.y);
     this.cameras.main.shake(200, 0.02);
-    this.cameras.main.flash(200, 255, 0, 0); // 赤フラッシュ
+    this.cameras.main.flash(200, 255, 0, 0); 
     this.triggerVibration(100);
     this.triggerHitStop(100);
 
@@ -868,13 +849,11 @@ class MainScene extends Phaser.Scene {
     this.input.addPointer(3); 
     const btnRadius = 40;
     
-    // ボタン作成ヘルパー
     const createBtn = (x: number, y: number, color: number, text: string, callback: (isDown: boolean) => void) => {
         const btn = this.add.circle(x, y, btnRadius, color, 0.5)
             .setScrollFactor(0).setInteractive().setDepth(100)
             .on('pointerdown', () => { 
                 callback(true);
-                // ★ボタンタップ時の振動
                 this.triggerVibration(10);
                 btn.setAlpha(0.8);
                 btn.setScale(0.9);
