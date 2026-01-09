@@ -69,6 +69,9 @@ class TitleScene extends Phaser.Scene {
 
     this.input.on('pointerdown', () => {
       this.sound.play('se_attack', { volume: 1.5 }); 
+      // ★開始時に振動（バイブレーションAPI）
+      if (navigator.vibrate) navigator.vibrate(50);
+      
       this.cameras.main.fadeOut(500, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         this.scene.start('MainScene');
@@ -231,6 +234,15 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp--;
     this.drawHealthBar();
 
+    // ★ダメージ演出：血しぶき
+    (this.scene as MainScene).createBloodEffect(this.x, this.y);
+    
+    // ★ヒットストップ（小）
+    (this.scene as MainScene).triggerHitStop(50);
+    
+    // ★振動（小）
+    (this.scene as MainScene).triggerVibration(30);
+
     if (this.hp <= 0) {
         this.die();
     } else {
@@ -244,9 +256,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   protected die() {
-    // 敵が死んだ時の処理（オーバーライド用）
-    // スコア加算
     (this.scene as MainScene).addScore(100);
+    
+    // ★トドメ演出：ヒットストップ（大）、振動（大）
+    (this.scene as MainScene).triggerHitStop(150);
+    (this.scene as MainScene).triggerVibration(100);
 
     this.isDead = true;
     this.setVelocity(0, 0);
@@ -280,24 +294,28 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 }
 
-// --- ★ボス敵クラス（Enemyを継承） ---
+// --- ボス ---
 class BossEnemy extends Enemy {
     constructor(scene: Phaser.Scene, x: number, y: number) {
         super(scene, x, y);
-        this.setScale(3); // 巨大化
-        this.hp = 10;     // 体力増強
+        this.setScale(3); 
+        this.hp = 10;     
         this.maxHp = 10;
-        this.moveSpeed = 150; // 足が速い
-        this.attackRange = 200; // リーチが長い
-        this.setTint(0x550000); // どす黒い赤
-        // ボス用のサイズ調整
+        this.moveSpeed = 150; 
+        this.attackRange = 200; 
+        this.setTint(0x550000); 
         this.body!.setSize(40, 60);
         this.body!.setOffset(80, 60);
     }
 
-    // ボス専用の死亡処理
     protected die() {
-        (this.scene as MainScene).addScore(1000); // 高得点
+        (this.scene as MainScene).addScore(1000);
+        
+        // ★ボス撃破演出：超ヒットストップ
+        (this.scene as MainScene).triggerHitStop(300);
+        (this.scene as MainScene).triggerVibration(500);
+        (this.scene as MainScene).cameras.main.flash(500, 255, 255, 255); // 白フラッシュ
+
         this.isDead = true;
         this.setVelocity(0, 0);
         if (this.body) {
@@ -308,7 +326,6 @@ class BossEnemy extends Enemy {
         this.scene.sound.play('se_hit', { volume: 2.0 });
         this.play('death', true);
         
-        // ボス撃破イベント呼び出し
         (this.scene as MainScene).onBossDefeated();
     }
 }
@@ -348,9 +365,8 @@ class MainScene extends Phaser.Scene {
   private score: number = 0;
   private scoreText!: Phaser.GameObjects.Text;
   
-  // ★ステージ進行管理
-  private wave: number = 0; // 0:初期, 1:雑魚戦, 2:ボス前会話, 3:ボス戦, 4:クリア
-  private killCount: number = 0; // 倒した数
+  private wave: number = 0; 
+  private killCount: number = 0; 
   private spawnTimer!: Phaser.Time.TimerEvent;
 
   private inputLeft: boolean = false;
@@ -371,6 +387,7 @@ class MainScene extends Phaser.Scene {
   }
 
   preload() {
+    // --- 画像読み込み ---
     this.load.spritesheet('player_idle', '/assets/Idle.png', { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet('player_run', '/assets/Run.png', { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet('player_jump', '/assets/Jump.png', { frameWidth: 200, frameHeight: 200 });
@@ -386,6 +403,12 @@ class MainScene extends Phaser.Scene {
     this.load.audio('se_attack', '/assets/sounds/attack.mp3');
     this.load.audio('se_hit', '/assets/sounds/hit.mp3');
     this.load.audio('se_jump', '/assets/sounds/jump.mp3');
+
+    // ★パーティクル用の「白い四角」をプログラムで生成
+    const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+    graphics.fillStyle(0xffffff);
+    graphics.fillRect(0, 0, 4, 4); // 4x4のドット
+    graphics.generateTexture('pixel', 4, 4);
   }
 
   create() {
@@ -454,7 +477,6 @@ class MainScene extends Phaser.Scene {
     this.attackHitbox.body!.enable = false;
     this.attackHitbox.body!.setAllowGravity(false);
 
-    // スポーンタイマー（初期停止）
     this.spawnTimer = this.time.addEvent({
         delay: 2000, 
         callback: this.spawnLoop,
@@ -463,7 +485,6 @@ class MainScene extends Phaser.Scene {
         paused: true
     });
 
-    // UI
     this.hpBar = this.add.graphics();
     this.hpBar.setScrollFactor(0);
     this.hpBar.setDepth(100);
@@ -502,7 +523,7 @@ class MainScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
 
     this.input.on('pointerdown', () => {
-      if (!this.isPlayerAlive || this.wave === 4) { // クリア後もリトライ可
+      if (!this.isPlayerAlive || this.wave === 4) { 
         this.scene.restart();
       }
     });
@@ -514,7 +535,6 @@ class MainScene extends Phaser.Scene {
 
     this.createController();
 
-    // ★ゲーム開始フロー
     this.time.delayedCall(500, () => {
       this.startDialog([
         { name: '主人公', text: '……霧の森。門番がいると聞く。' },
@@ -524,14 +544,68 @@ class MainScene extends Phaser.Scene {
     });
   }
 
-  // ダイアログ終了時に呼ばれる
+  // --- ★ジューシーさを出すためのヘルパー関数 ---
+
+  // 1. 振動 (Haptic)
+  triggerVibration(duration: number) {
+      if (navigator.vibrate) {
+          navigator.vibrate(duration);
+      }
+  }
+
+  // 2. ヒットストップ (Hit Stop)
+  triggerHitStop(duration: number) {
+      // 物理演算とアニメーションを一時停止
+      this.physics.world.pause();
+      this.anims.pauseAll();
+      
+      this.time.delayedCall(duration, () => {
+          if (this.scene.isActive()) {
+              this.physics.world.resume();
+              this.anims.resumeAll();
+          }
+      });
+  }
+
+  // 3. 血しぶきエフェクト (Particles)
+  createBloodEffect(x: number, y: number) {
+      const particles = this.add.particles(x, y, 'pixel', {
+          speed: { min: 100, max: 300 },
+          angle: { min: 200, max: 340 }, // 上方向に噴き出す
+          scale: { start: 2, end: 0 },
+          color: [0xcc0000, 0x990000],
+          lifespan: 600,
+          gravityY: 800,
+          quantity: 15,
+          emitting: false
+      });
+      particles.explode(15, x, y);
+      // 自動で消すのは設定できないため、少し経ったらdestroy
+      this.time.delayedCall(1000, () => particles.destroy());
+  }
+
+  // 4. パリィの火花 (Spark)
+  createSparkEffect(x: number, y: number) {
+      const particles = this.add.particles(x, y, 'pixel', {
+          speed: 400,
+          scale: { start: 3, end: 0 },
+          color: [0xffffaa, 0xffaa00],
+          lifespan: 300,
+          blendMode: 'ADD',
+          quantity: 10,
+          emitting: false
+      });
+      particles.explode(20, x, y);
+      this.time.delayedCall(500, () => particles.destroy());
+  }
+
+  // ------------------------------------------
+
   onDialogComplete() {
       if (this.wave === 0) {
-          // Wave 1開始：雑魚戦
           this.wave = 1;
-          this.spawnTimer.paused = false; // 敵湧き開始
+          this.spawnTimer.paused = false; 
       } else if (this.wave === 2) {
-          // Wave 3開始：ボス出現
           this.wave = 3;
           this.spawnBoss();
       }
@@ -540,9 +614,7 @@ class MainScene extends Phaser.Scene {
   spawnLoop() {
       if (!this.isPlayerAlive || this.isTalking) return;
       
-      // Wave 1: 雑魚を湧かせる
       if (this.wave === 1) {
-          // 同時に画面内にいる敵は3体まで
           const aliveCount = this.enemies.filter(e => !e.isDead).length;
           if (aliveCount < 3) {
               this.spawnEnemy();
@@ -564,15 +636,14 @@ class MainScene extends Phaser.Scene {
   }
 
   spawnBoss() {
-      // 画面外からボス登場
-      const x = this.player.x < 1500 ? 2800 : 200; // プレイヤーから遠い方
-      const y = 430; // 少し浮かないように調整
+      const x = this.player.x < 1500 ? 2800 : 200; 
+      const y = 430; 
       const boss = new BossEnemy(this, x, y);
       this.enemies.push(boss);
       this.setupEnemyCollision(boss);
       
-      // BGMを変えたり、演出を入れるならここ
-      this.cameras.main.shake(500, 0.01); // 登場の地響き
+      this.cameras.main.shake(500, 0.01); 
+      this.triggerVibration(200); // 登場振動
   }
 
   setupEnemyCollision(enemy: Enemy) {
@@ -582,6 +653,7 @@ class MainScene extends Phaser.Scene {
         const e = hitEnemy as Enemy; 
         if (!e.isDead) {
           e.takeDamage();
+          // メインシーン側でカメラシェイク管理
           this.cameras.main.shake(100, 0.01); 
         }
       }, undefined, this);
@@ -597,20 +669,25 @@ class MainScene extends Phaser.Scene {
       this.score += points;
       this.scoreText.setText(`Score: ${this.score}`);
       
+      // スコアが弾むアニメーション（UI Bounce）
+      this.tweens.add({
+          targets: this.scoreText,
+          scale: 1.5,
+          duration: 100,
+          yoyo: true
+      });
+
       if (this.wave === 1) {
           this.killCount++;
           if (this.killCount >= 5) {
-              // 規定数倒したらボスイベントへ
               this.wave = 2;
-              this.spawnTimer.paused = true; // 雑魚湧き停止
-              // 残党を消す（演出的に逃げたことにする）
+              this.spawnTimer.paused = true; 
               this.enemies.forEach(e => {
                   if (!e.isDead) {
                       e.destroy();
                   }
               });
               
-              // 少し待ってから会話
               this.time.delayedCall(1000, () => {
                   this.startDialog([
                       { name: '？？？', text: '小賢しい鼠め……！' },
@@ -622,18 +699,13 @@ class MainScene extends Phaser.Scene {
   }
 
   onBossDefeated() {
-      // ボス撃破後の処理
-      this.wave = 4; // クリア状態
-      
+      this.wave = 4; 
       this.time.delayedCall(2000, () => {
           this.startDialog([
               { name: '門番', text: 'ぐ、ぐおぉぉ……ッ！' },
               { name: '主人公', text: '……道は開かれた。' },
           ]);
           
-          // ダイアログ終了判定を拡張して、クリア画面へ遷移させる
-          // 今回は簡易的に、会話終了後にクリア画面を出すロジックを nextLine に仕込むか、
-          // ここで別途クリア表示処理を予約する
           this.time.delayedCall(3000, () => {
               if (!this.isTalking) this.gameClear();
           });
@@ -666,13 +738,20 @@ class MainScene extends Phaser.Scene {
 
         if (blockDuration < 200) {
             this.showParryEffect(this.player.x, this.player.y);
+            this.createSparkEffect(this.player.x + 50, this.player.y); // ★火花追加
             this.sound.play('se_hit', { volume: 2.0, rate: 2.0 }); 
             this.addScore(500);
+            
+            // ★パリィ成功時：強めの振動とヒットストップ
+            this.triggerVibration(50);
+            this.triggerHitStop(100);
+            this.cameras.main.flash(100, 255, 255, 200); // 白い閃光
+
             enemy.getStunned();
-            this.cameras.main.shake(100, 0.02);
             return;
         } else {
             this.sound.play('se_hit', { volume: 1.0, rate: 0.5 });
+            this.triggerVibration(20); // ガード時：軽い振動
             const direction = this.player.x < enemy.x ? -1 : 1;
             this.player.setVelocityX(200 * direction);
             return;
@@ -682,7 +761,13 @@ class MainScene extends Phaser.Scene {
     this.hp -= 20; 
     this.drawPlayerHealthBar();
     this.sound.play('se_hit', { volume: 1.0 });
+    
+    // ★被弾時：血しぶき、赤フラッシュ、振動
+    this.createBloodEffect(this.player.x, this.player.y);
     this.cameras.main.shake(200, 0.02);
+    this.cameras.main.flash(200, 255, 0, 0); // 赤フラッシュ
+    this.triggerVibration(100);
+    this.triggerHitStop(100);
 
     if (this.hp <= 0) {
       this.gameOver();
@@ -744,7 +829,6 @@ class MainScene extends Phaser.Scene {
 
   gameClear() {
     if (!this.isPlayerAlive) return;
-    // クリア演出
     this.physics.pause();
     this.gameClearText.setVisible(true);
     this.gameClearText.setScale(2);
@@ -771,11 +855,9 @@ class MainScene extends Phaser.Scene {
   nextLine() {
     this.currentLineIndex++;
     if (this.currentLineIndex >= this.currentDialog.length) {
-      // ダイアログ終了
       this.dialogBox.classList.add('hidden');
       this.isTalking = false;
       this.physics.resume();
-      // ★ダイアログ終了時のイベント発火
       this.onDialogComplete();
     } else {
       this.showLine();
@@ -786,33 +868,36 @@ class MainScene extends Phaser.Scene {
     this.input.addPointer(3); 
     const btnRadius = 40;
     
-    this.add.circle(100, 600, btnRadius, 0x888888, 0.5).setScrollFactor(0).setInteractive().setDepth(100)
-      .on('pointerdown', () => { this.inputLeft = true; })
-      .on('pointerup', () => { this.inputLeft = false; })
-      .on('pointerout', () => { this.inputLeft = false; });
-    this.add.text(100, 600, '←', { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+    // ボタン作成ヘルパー
+    const createBtn = (x: number, y: number, color: number, text: string, callback: (isDown: boolean) => void) => {
+        const btn = this.add.circle(x, y, btnRadius, color, 0.5)
+            .setScrollFactor(0).setInteractive().setDepth(100)
+            .on('pointerdown', () => { 
+                callback(true);
+                // ★ボタンタップ時の振動
+                this.triggerVibration(10);
+                btn.setAlpha(0.8);
+                btn.setScale(0.9);
+            })
+            .on('pointerup', () => { 
+                callback(false);
+                btn.setAlpha(0.5);
+                btn.setScale(1.0);
+            })
+            .on('pointerout', () => {
+                callback(false);
+                btn.setAlpha(0.5);
+                btn.setScale(1.0);
+            });
+        this.add.text(x, y, text, { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+        return btn;
+    };
 
-    this.add.circle(220, 600, btnRadius, 0x888888, 0.5).setScrollFactor(0).setInteractive().setDepth(100)
-      .on('pointerdown', () => { this.inputRight = true; })
-      .on('pointerup', () => { this.inputRight = false; })
-      .on('pointerout', () => { this.inputRight = false; });
-    this.add.text(220, 600, '→', { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
-
-    this.add.circle(1050, 600, btnRadius, 0xff0000, 0.5).setScrollFactor(0).setInteractive().setDepth(100)
-      .on('pointerdown', () => { this.inputAttack = true; });
-    this.add.text(1050, 600, '斬', { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
-
-    this.add.circle(1180, 550, btnRadius, 0x0000ff, 0.5).setScrollFactor(0).setInteractive().setDepth(100)
-      .on('pointerdown', () => { this.inputUp = true; })
-      .on('pointerup', () => { this.inputUp = false; })
-      .on('pointerout', () => { this.inputUp = false; });
-    this.add.text(1180, 550, '跳', { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
-
-    this.add.circle(1050, 500, btnRadius, 0xaaaa00, 0.5).setScrollFactor(0).setInteractive().setDepth(100)
-      .on('pointerdown', () => { this.inputDown = true; })
-      .on('pointerup', () => { this.inputDown = false; })
-      .on('pointerout', () => { this.inputDown = false; });
-    this.add.text(1050, 500, '防', { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+    createBtn(100, 600, 0x888888, '←', (isDown) => { this.inputLeft = isDown; });
+    createBtn(220, 600, 0x888888, '→', (isDown) => { this.inputRight = isDown; });
+    createBtn(1050, 600, 0xff0000, '斬', (isDown) => { this.inputAttack = isDown; });
+    createBtn(1180, 550, 0x0000ff, '跳', (isDown) => { this.inputUp = isDown; });
+    createBtn(1050, 500, 0xaaaa00, '防', (isDown) => { this.inputDown = isDown; });
   }
 
   update() {
