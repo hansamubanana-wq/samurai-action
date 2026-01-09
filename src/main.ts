@@ -38,13 +38,19 @@ class TitleScene extends Phaser.Scene {
     this.bg4 = this.add.tileSprite(0, 0, width, height, 'bg_4').setOrigin(0, 0).setScale(4);
     this.bg5 = this.add.tileSprite(0, 0, width, height, 'bg_5').setOrigin(0, 0).setScale(4);
 
-    this.add.text(width / 2, height / 2 - 50, '霧隠の侍', {
+    this.add.text(width / 2, height / 2 - 80, '霧隠の侍', {
       fontSize: '120px',
       fontFamily: '"Yu Mincho", serif',
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 8,
       shadow: { blur: 10, color: '#000000', fill: true }
+    }).setOrigin(0.5);
+
+    this.add.text(width / 2, height / 2 + 40, '第一章：門番', {
+        fontSize: '40px',
+        fontFamily: '"Yu Mincho", serif',
+        color: '#aaaaaa'
     }).setOrigin(0.5);
 
     const startText = this.add.text(width / 2, height / 2 + 150, '- Click to Start -', {
@@ -62,7 +68,7 @@ class TitleScene extends Phaser.Scene {
     });
 
     this.input.on('pointerdown', () => {
-      this.sound.play('se_attack'); 
+      this.sound.play('se_attack', { volume: 1.5 }); 
       this.cameras.main.fadeOut(500, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         this.scene.start('MainScene');
@@ -71,7 +77,6 @@ class TitleScene extends Phaser.Scene {
   }
 
   update() {
-    // ★修正箇所：bg1も少し動かすことで「使われていない」エラーを回避
     this.bg1.tilePositionX += 0.05; 
     this.bg2.tilePositionX += 0.2;
     this.bg3.tilePositionX += 0.4;
@@ -83,23 +88,23 @@ class TitleScene extends Phaser.Scene {
 
 // --- 敵クラス ---
 class Enemy extends Phaser.Physics.Arcade.Sprite {
-  private moveSpeed: number = 100;
-  private detectRange: number = 500;
-  private attackRange: number = 150;
+  protected moveSpeed: number = 100;
+  protected detectRange: number = 500;
+  protected attackRange: number = 150;
   
   public attackHitbox: Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
-  private isAttacking: boolean = false;
-  private nextAttackTime: number = 0;
+  protected isAttacking: boolean = false;
+  protected nextAttackTime: number = 0;
   
   public hp: number = 3;
   public maxHp: number = 3;
-  
   public isDead: boolean = false;
-  private healthBar: Phaser.GameObjects.Graphics;
+  protected healthBar: Phaser.GameObjects.Graphics;
   public isHit: boolean = false;
+  public isStunned: boolean = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'player_idle');
+  constructor(scene: Phaser.Scene, x: number, y: number, texture: string = 'player_idle') {
+    super(scene, x, y, texture);
     scene.add.existing(this);
     scene.physics.add.existing(this);
     
@@ -108,7 +113,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
     this.setBounce(0);
     this.body!.setSize(40, 60);
-    this.body!.setOffset(80, 60); 
+    this.body!.setOffset(80, 60); // 接地調整
     
     this.setDepth(1);
     this.play('idle');
@@ -151,7 +156,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.healthBar.fillStyle(0xcc0000);
     this.healthBar.fillRect(x, y, width, height);
 
-    const hpPercent = this.hp / this.maxHp;
+    const hpPercent = Math.max(0, this.hp / this.maxHp);
     this.healthBar.fillStyle(0x00ff00);
     this.healthBar.fillRect(x, y, width * hpPercent, height);
   }
@@ -202,7 +207,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.nextAttackTime = this.scene.time.now + 2000;
     this.setFlipX(this.x > player.x);
     this.play('attack', true);
-    this.scene.sound.play('se_attack'); 
+    this.scene.sound.play('se_attack', { volume: 1.5 }); 
 
     const offsetX = this.flipX ? -120 : 120;
     this.attackHitbox.setPosition(this.x + offsetX, this.y);
@@ -227,17 +232,9 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.drawHealthBar();
 
     if (this.hp <= 0) {
-        this.isDead = true;
-        this.setVelocity(0, 0);
-        if (this.body) {
-            this.body.checkCollision.none = true; 
-            (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
-        }
-        this.attackHitbox.body!.enable = false; 
-        this.scene.sound.play('se_hit', { volume: 0.8 });
-        this.play('death', true); 
+        this.die();
     } else {
-        this.scene.sound.play('se_hit', { volume: 0.8 });
+        this.scene.sound.play('se_hit', { volume: 1.2 });
         this.setTint(0xffaaaa);
         this.scene.time.delayedCall(100, () => this.setTint(0xff5555));
         const backDir = this.flipX ? 1 : -1;
@@ -246,8 +243,22 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  // よろけフラグ
-  public isStunned: boolean = false;
+  protected die() {
+    // 敵が死んだ時の処理（オーバーライド用）
+    // スコア加算
+    (this.scene as MainScene).addScore(100);
+
+    this.isDead = true;
+    this.setVelocity(0, 0);
+    if (this.body) {
+        this.body.checkCollision.none = true; 
+        (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+    }
+    this.attackHitbox.body!.enable = false; 
+    
+    this.scene.sound.play('se_hit', { volume: 1.5 });
+    this.play('death', true); 
+  }
 
   getStunned() {
     if (this.isDead || this.isStunned) return;
@@ -269,15 +280,48 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 }
 
+// --- ★ボス敵クラス（Enemyを継承） ---
+class BossEnemy extends Enemy {
+    constructor(scene: Phaser.Scene, x: number, y: number) {
+        super(scene, x, y);
+        this.setScale(3); // 巨大化
+        this.hp = 10;     // 体力増強
+        this.maxHp = 10;
+        this.moveSpeed = 150; // 足が速い
+        this.attackRange = 200; // リーチが長い
+        this.setTint(0x550000); // どす黒い赤
+        // ボス用のサイズ調整
+        this.body!.setSize(40, 60);
+        this.body!.setOffset(80, 60);
+    }
+
+    // ボス専用の死亡処理
+    protected die() {
+        (this.scene as MainScene).addScore(1000); // 高得点
+        this.isDead = true;
+        this.setVelocity(0, 0);
+        if (this.body) {
+            this.body.checkCollision.none = true; 
+            (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+        }
+        this.attackHitbox.body!.enable = false; 
+        this.scene.sound.play('se_hit', { volume: 2.0 });
+        this.play('death', true);
+        
+        // ボス撃破イベント呼び出し
+        (this.scene as MainScene).onBossDefeated();
+    }
+}
+
 // --- メインシーン ---
 class MainScene extends Phaser.Scene {
   public isPlayerAlive: boolean = true;
-  private isGameClear: boolean = false;
-
+  
   private player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  
   private enemies: Enemy[] = []; 
   private attackHitbox!: Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
 
@@ -300,6 +344,14 @@ class MainScene extends Phaser.Scene {
   private gameOverText!: Phaser.GameObjects.Text;
   private gameClearText!: Phaser.GameObjects.Text;
   private retryText!: Phaser.GameObjects.Text;
+
+  private score: number = 0;
+  private scoreText!: Phaser.GameObjects.Text;
+  
+  // ★ステージ進行管理
+  private wave: number = 0; // 0:初期, 1:雑魚戦, 2:ボス前会話, 3:ボス戦, 4:クリア
+  private killCount: number = 0; // 倒した数
+  private spawnTimer!: Phaser.Time.TimerEvent;
 
   private inputLeft: boolean = false;
   private inputRight: boolean = false;
@@ -340,10 +392,12 @@ class MainScene extends Phaser.Scene {
     this.cameras.main.fadeIn(500, 0, 0, 0);
 
     this.isPlayerAlive = true;
-    this.isGameClear = false;
     this.hp = 100;
+    this.score = 0;
     this.isInvincible = false;
     this.enemies = [];
+    this.wave = 0;
+    this.killCount = 0;
 
     const { width, height } = this.scale;
     
@@ -400,19 +454,128 @@ class MainScene extends Phaser.Scene {
     this.attackHitbox.body!.enable = false;
     this.attackHitbox.body!.setAllowGravity(false);
 
-    const enemyPositions = [
-        { x: 800, y: 450 },
-        { x: 1200, y: 450 },
-        { x: 1600, y: 300 }, 
-        { x: 2000, y: 450 },
-        { x: 2600, y: 450 }
-    ];
-
-    enemyPositions.forEach(pos => {
-        this.enemies.push(new Enemy(this, pos.x, pos.y));
+    // スポーンタイマー（初期停止）
+    this.spawnTimer = this.time.addEvent({
+        delay: 2000, 
+        callback: this.spawnLoop,
+        callbackScope: this,
+        loop: true,
+        paused: true
     });
 
-    this.enemies.forEach(enemy => {
+    // UI
+    this.hpBar = this.add.graphics();
+    this.hpBar.setScrollFactor(0);
+    this.hpBar.setDepth(100);
+    this.drawPlayerHealthBar();
+
+    this.add.text(20, 15, 'HP', { fontSize: '24px', fontFamily: '"Yu Mincho", serif', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }).setScrollFactor(0).setDepth(101);
+
+    this.scoreText = this.add.text(width - 20, 20, 'Score: 0', {
+        fontSize: '40px',
+        fontFamily: '"Yu Mincho", serif',
+        color: '#ffcc00',
+        stroke: '#000000',
+        strokeThickness: 4
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(100);
+
+    this.gameOverText = this.add.text(width / 2, height / 2, '死', {
+      fontSize: '200px',
+      fontFamily: '"Yu Mincho", serif',
+      color: '#cc0000',
+      stroke: '#000000',
+      strokeThickness: 10
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
+
+    this.gameClearText = this.add.text(width / 2, height / 2, '一章 完', {
+      fontSize: '180px',
+      fontFamily: '"Yu Mincho", serif',
+      color: '#ffcc00',
+      stroke: '#000000',
+      strokeThickness: 10
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
+
+    this.retryText = this.add.text(width / 2, height / 2 + 150, 'Click to Retry', {
+      fontSize: '40px',
+      color: '#ffffff',
+      align: 'center'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
+
+    this.input.on('pointerdown', () => {
+      if (!this.isPlayerAlive || this.wave === 4) { // クリア後もリトライ可
+        this.scene.restart();
+      }
+    });
+
+    if (this.input.keyboard) {
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    }
+
+    this.createController();
+
+    // ★ゲーム開始フロー
+    this.time.delayedCall(500, () => {
+      this.startDialog([
+        { name: '主人公', text: '……霧の森。門番がいると聞く。' },
+        { name: '主人公', text: '雑魚を片付けて、親玉を引きずり出すか。' },
+        { name: 'システム', text: '【目標】\n敵を5体倒せ！' },
+      ]);
+    });
+  }
+
+  // ダイアログ終了時に呼ばれる
+  onDialogComplete() {
+      if (this.wave === 0) {
+          // Wave 1開始：雑魚戦
+          this.wave = 1;
+          this.spawnTimer.paused = false; // 敵湧き開始
+      } else if (this.wave === 2) {
+          // Wave 3開始：ボス出現
+          this.wave = 3;
+          this.spawnBoss();
+      }
+  }
+
+  spawnLoop() {
+      if (!this.isPlayerAlive || this.isTalking) return;
+      
+      // Wave 1: 雑魚を湧かせる
+      if (this.wave === 1) {
+          // 同時に画面内にいる敵は3体まで
+          const aliveCount = this.enemies.filter(e => !e.isDead).length;
+          if (aliveCount < 3) {
+              this.spawnEnemy();
+          }
+      }
+  }
+
+  spawnEnemy() {
+      const dist = 600;
+      const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
+      let x = this.player.x + (direction * dist);
+      if (x < 100) x = 100;
+      if (x > 2900) x = 2900;
+      const y = 450;
+      
+      const enemy = new Enemy(this, x, y);
+      this.enemies.push(enemy);
+      this.setupEnemyCollision(enemy);
+  }
+
+  spawnBoss() {
+      // 画面外からボス登場
+      const x = this.player.x < 1500 ? 2800 : 200; // プレイヤーから遠い方
+      const y = 430; // 少し浮かないように調整
+      const boss = new BossEnemy(this, x, y);
+      this.enemies.push(boss);
+      this.setupEnemyCollision(boss);
+      
+      // BGMを変えたり、演出を入れるならここ
+      this.cameras.main.shake(500, 0.01); // 登場の地響き
+  }
+
+  setupEnemyCollision(enemy: Enemy) {
       this.physics.add.collider(enemy, this.platforms);
       
       this.physics.add.overlap(this.attackHitbox, enemy, (_hitbox, hitEnemy) => {
@@ -428,58 +591,53 @@ class MainScene extends Phaser.Scene {
       }, undefined, this);
 
       this.physics.add.collider(this.player, enemy);
-    });
+  }
 
-    // UI
-    this.hpBar = this.add.graphics();
-    this.hpBar.setScrollFactor(0);
-    this.hpBar.setDepth(100);
-    this.drawPlayerHealthBar();
-
-    this.add.text(20, 15, 'HP', { fontSize: '24px', fontFamily: '"Yu Mincho", serif', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }).setScrollFactor(0).setDepth(101);
-
-    this.gameOverText = this.add.text(width / 2, height / 2, '死', {
-      fontSize: '200px',
-      fontFamily: '"Yu Mincho", serif',
-      color: '#cc0000',
-      stroke: '#000000',
-      strokeThickness: 10
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
-
-    this.gameClearText = this.add.text(width / 2, height / 2, '見事', {
-      fontSize: '180px',
-      fontFamily: '"Yu Mincho", serif',
-      color: '#ffcc00',
-      stroke: '#000000',
-      strokeThickness: 10
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
-
-    this.retryText = this.add.text(width / 2, height / 2 + 150, 'Click to Retry', {
-      fontSize: '40px',
-      color: '#ffffff'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
-
-    this.input.on('pointerdown', () => {
-      if (!this.isPlayerAlive || this.isGameClear) {
-        this.scene.restart();
+  addScore(points: number) {
+      this.score += points;
+      this.scoreText.setText(`Score: ${this.score}`);
+      
+      if (this.wave === 1) {
+          this.killCount++;
+          if (this.killCount >= 5) {
+              // 規定数倒したらボスイベントへ
+              this.wave = 2;
+              this.spawnTimer.paused = true; // 雑魚湧き停止
+              // 残党を消す（演出的に逃げたことにする）
+              this.enemies.forEach(e => {
+                  if (!e.isDead) {
+                      e.destroy();
+                  }
+              });
+              
+              // 少し待ってから会話
+              this.time.delayedCall(1000, () => {
+                  this.startDialog([
+                      { name: '？？？', text: '小賢しい鼠め……！' },
+                      { name: '門番', text: '我が剣の錆にしてくれるわ！！' },
+                  ]);
+              });
+          }
       }
-    });
+  }
 
-    if (this.input.keyboard) {
-        this.cursors = this.input.keyboard.createCursorKeys();
-        this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    }
-
-    this.createController();
-
-    this.time.delayedCall(500, () => {
-      this.startDialog([
-        { name: '主人公', text: '……ここは、霧の森か。' },
-        { name: '主人公', text: '気配を感じる。奴らが潜んでいるようだ。' },
-        { name: 'システム', text: '【操作方法】\n← → ： 移動\nSpace ： 攻撃\n↑ ： ジャンプ\n↓ ： 防御（直前でパリィ）' },
-        { name: '主人公', text: '……行くぞ。' },
-      ]);
-    });
+  onBossDefeated() {
+      // ボス撃破後の処理
+      this.wave = 4; // クリア状態
+      
+      this.time.delayedCall(2000, () => {
+          this.startDialog([
+              { name: '門番', text: 'ぐ、ぐおぉぉ……ッ！' },
+              { name: '主人公', text: '……道は開かれた。' },
+          ]);
+          
+          // ダイアログ終了判定を拡張して、クリア画面へ遷移させる
+          // 今回は簡易的に、会話終了後にクリア画面を出すロジックを nextLine に仕込むか、
+          // ここで別途クリア表示処理を予約する
+          this.time.delayedCall(3000, () => {
+              if (!this.isTalking) this.gameClear();
+          });
+      });
   }
 
   drawPlayerHealthBar() {
@@ -500,7 +658,7 @@ class MainScene extends Phaser.Scene {
   }
 
   takeDamage(enemy: Enemy) {
-    if (this.isInvincible || !this.isPlayerAlive || this.isGameClear) return;
+    if (this.isInvincible || !this.isPlayerAlive || this.wave === 4) return;
 
     if (this.isBlocking) {
         const currentTime = this.time.now;
@@ -508,12 +666,13 @@ class MainScene extends Phaser.Scene {
 
         if (blockDuration < 200) {
             this.showParryEffect(this.player.x, this.player.y);
-            this.sound.play('se_hit', { volume: 1.0, rate: 2.0 }); 
+            this.sound.play('se_hit', { volume: 2.0, rate: 2.0 }); 
+            this.addScore(500);
             enemy.getStunned();
             this.cameras.main.shake(100, 0.02);
             return;
         } else {
-            this.sound.play('se_hit', { volume: 0.5, rate: 0.5 });
+            this.sound.play('se_hit', { volume: 1.0, rate: 0.5 });
             const direction = this.player.x < enemy.x ? -1 : 1;
             this.player.setVelocityX(200 * direction);
             return;
@@ -522,7 +681,7 @@ class MainScene extends Phaser.Scene {
 
     this.hp -= 20; 
     this.drawPlayerHealthBar();
-    this.sound.play('se_hit', { volume: 0.5 });
+    this.sound.play('se_hit', { volume: 1.0 });
     this.cameras.main.shake(200, 0.02);
 
     if (this.hp <= 0) {
@@ -579,16 +738,17 @@ class MainScene extends Phaser.Scene {
     this.physics.pause();
     this.gameOverText.setVisible(true);
     this.gameOverText.setScale(2);
+    this.retryText.setText(`Score: ${this.score}\nClick to Retry`);
     this.tweens.add({ targets: this.gameOverText, scale: 1, duration: 500, ease: 'Bounce.easeOut', onComplete: () => { this.retryText.setVisible(true); } });
   }
 
   gameClear() {
     if (!this.isPlayerAlive) return;
-    this.isGameClear = true;
-    this.isInvincible = true;
+    // クリア演出
     this.physics.pause();
     this.gameClearText.setVisible(true);
     this.gameClearText.setScale(2);
+    this.retryText.setText(`Score: ${this.score}\nClick to Title`);
     this.tweens.add({ targets: this.gameClearText, scale: 1, duration: 500, ease: 'Back.easeOut', onComplete: () => { this.retryText.setVisible(true); } });
   }
 
@@ -611,9 +771,12 @@ class MainScene extends Phaser.Scene {
   nextLine() {
     this.currentLineIndex++;
     if (this.currentLineIndex >= this.currentDialog.length) {
+      // ダイアログ終了
       this.dialogBox.classList.add('hidden');
       this.isTalking = false;
       this.physics.resume();
+      // ★ダイアログ終了時のイベント発火
+      this.onDialogComplete();
     } else {
       this.showLine();
     }
@@ -653,7 +816,7 @@ class MainScene extends Phaser.Scene {
   }
 
   update() {
-    if (this.isTalking || !this.isPlayerAlive || this.isGameClear) return;
+    if (this.isTalking || !this.isPlayerAlive) return;
 
     this.bg1.tilePositionX = this.cameras.main.scrollX * 0.0;
     this.bg2.tilePositionX = this.cameras.main.scrollX * 0.1;
@@ -664,11 +827,6 @@ class MainScene extends Phaser.Scene {
     this.enemies.forEach(enemy => {
       if (enemy.active) enemy.update(this.player);
     });
-
-    const aliveEnemies = this.enemies.filter(e => !e.isDead);
-    if (this.enemies.length > 0 && aliveEnemies.length === 0 && !this.isGameClear) {
-        this.gameClear();
-    }
 
     if (!this.cursors || !this.spaceKey) return;
 
@@ -695,7 +853,7 @@ class MainScene extends Phaser.Scene {
 
     if (attack && !this.isAttacking && !this.isInvincible) {
       this.isAttacking = true;
-      this.sound.play('se_attack');
+      this.sound.play('se_attack', { volume: 1.5 });
       this.player.setVelocityX(0);
       this.player.anims.play('attack', true);
 
@@ -739,7 +897,7 @@ class MainScene extends Phaser.Scene {
 
     if (up && isGrounded) { 
       this.player.setVelocityY(-600);
-      this.sound.play('se_jump', { volume: 0.5 });
+      this.sound.play('se_jump', { volume: 1.0 });
     }
 
     if (!isGrounded) {
