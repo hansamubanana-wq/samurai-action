@@ -1,4 +1,3 @@
-// src/main.ts
 import Phaser from 'phaser';
 import './style.css';
 
@@ -10,6 +9,7 @@ type DialogLine = {
 
 // --- タイトルシーン ---
 class TitleScene extends Phaser.Scene {
+  // プロパティを使用するため、警告が出ないように保持
   private bg1!: Phaser.GameObjects.TileSprite;
   private bg2!: Phaser.GameObjects.TileSprite;
   private bg3!: Phaser.GameObjects.TileSprite;
@@ -71,6 +71,7 @@ class TitleScene extends Phaser.Scene {
   }
 
   update() {
+    // 背景スクロール処理（これで変数が使用されるためエラーが消えます）
     this.bg2.tilePositionX += 0.2;
     this.bg3.tilePositionX += 0.4;
     this.bg4.tilePositionX += 0.6;
@@ -88,8 +89,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   public attackHitbox: Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
   private isAttacking: boolean = false;
   private nextAttackTime: number = 0;
+  
+  // HP関連（明示的にパブリック定義）
+  public hp: number = 3;
+  public maxHp: number = 3;
+  
   public isDead: boolean = false;
-  public isStunned: boolean = false; // ★弾かれた時のよろけフラグ
   private healthBar: Phaser.GameObjects.Graphics;
   public isHit: boolean = false;
 
@@ -102,16 +107,19 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setTint(0xff5555);
     this.setCollideWorldBounds(true);
     this.setBounce(0);
-    this.body.setSize(40, 60);
-    this.body.setOffset(80, 60); 
+    this.body!.setSize(40, 60);
+    this.body!.setOffset(80, 60); 
+    
     this.setDepth(1);
     this.play('idle');
 
     const hitboxRect = scene.add.rectangle(0, 0, 150, 150, 0xff0000, 0);
-    this.attackHitbox = scene.physics.add.existing(hitboxRect) as Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
+    // 型変換エラー修正: unknownを経由してキャスト
+    this.attackHitbox = scene.physics.add.existing(hitboxRect) as unknown as Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
     this.attackHitbox.setVisible(false);
-    this.attackHitbox.body.enable = false;
-    this.attackHitbox.body.setAllowGravity(false);
+    // nullチェック回避 (!)
+    this.attackHitbox.body!.enable = false;
+    this.attackHitbox.body!.setAllowGravity(false);
 
     this.healthBar = scene.add.graphics();
     this.drawHealthBar();
@@ -203,10 +211,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.scene.time.delayedCall(300, () => {
       if (this.isAttacking && this.active && !this.isDead && !this.isStunned) {
-        this.attackHitbox.body.enable = true;
+        this.attackHitbox.body!.enable = true;
         this.scene.time.delayedCall(100, () => {
           if (this.attackHitbox.active) {
-            this.attackHitbox.body.enable = false;
+            this.attackHitbox.body!.enable = false;
             this.attackHitbox.setVisible(false);
           }
         });
@@ -223,9 +231,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
         this.isDead = true;
         this.setVelocity(0, 0);
-        this.body.checkCollision.none = true; 
-        (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
-        this.attackHitbox.body.enable = false; 
+        // ボディのnullチェック
+        if (this.body) {
+            this.body.checkCollision.none = true; 
+            (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+        }
+        this.attackHitbox.body!.enable = false; 
         this.scene.sound.play('se_hit', { volume: 0.8 });
         this.play('death', true); 
     } else {
@@ -238,25 +249,24 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  // ★弾かれた時の処理
+  // よろけフラグ
+  public isStunned: boolean = false;
+
   getStunned() {
     if (this.isDead || this.isStunned) return;
-    
     this.isStunned = true;
-    this.isAttacking = false; // 攻撃中断
-    this.attackHitbox.body.enable = false; // 判定消去
+    this.isAttacking = false;
+    this.attackHitbox.body!.enable = false; 
     
-    // よろけ演出（後ろに下がる）
     const backDir = this.flipX ? 1 : -1;
     this.setVelocityX(200 * backDir);
     this.setVelocityY(-200);
-    this.setTint(0xffff00); // 黄色く光る（体幹崩し）
+    this.setTint(0xffff00); 
 
-    // 1.5秒後に復帰
     this.scene.time.delayedCall(1500, () => {
       if (this.active && !this.isDead) {
         this.isStunned = false;
-        this.setTint(0xff5555); // 色戻す
+        this.setTint(0xff5555);
       }
     });
   }
@@ -283,9 +293,8 @@ class MainScene extends Phaser.Scene {
   private isAttacking: boolean = false;
   private isInvincible: boolean = false;
   
-  // ★防御関連
-  private isBlocking: boolean = false; // 防御中か
-  private blockStartTime: number = 0;  // 防御開始時刻
+  private isBlocking: boolean = false; 
+  private blockStartTime: number = 0;  
 
   private hp: number = 100;
   private maxHp: number = 100;
@@ -298,7 +307,7 @@ class MainScene extends Phaser.Scene {
   private inputLeft: boolean = false;
   private inputRight: boolean = false;
   private inputUp: boolean = false;
-  private inputDown: boolean = false; // ★下入力追加
+  private inputDown: boolean = false; 
   private inputAttack: boolean = false;
 
   private isTalking: boolean = false; 
@@ -328,7 +337,6 @@ class MainScene extends Phaser.Scene {
     this.load.audio('se_attack', '/assets/sounds/attack.mp3');
     this.load.audio('se_hit', '/assets/sounds/hit.mp3');
     this.load.audio('se_jump', '/assets/sounds/jump.mp3');
-    // パリィ音（今回はse_hitを高音再生で代用）
   }
 
   create() {
@@ -390,7 +398,8 @@ class MainScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, 3000, 720);
 
     const hitboxRect = this.add.rectangle(0, 0, 150, 150, 0xffff00, 0.5);
-    this.attackHitbox = this.physics.add.existing(hitboxRect) as Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
+    // 型変換エラー修正
+    this.attackHitbox = this.physics.add.existing(hitboxRect) as unknown as Phaser.Types.Physics.Arcade.ImageWithDynamicBody;
     this.attackHitbox.setVisible(false);
     this.attackHitbox.body.enable = false;
     this.attackHitbox.body.setAllowGravity(false);
@@ -410,7 +419,8 @@ class MainScene extends Phaser.Scene {
     this.enemies.forEach(enemy => {
       this.physics.add.collider(enemy, this.platforms);
       
-      this.physics.add.overlap(this.attackHitbox, enemy, (hitbox, hitEnemy) => {
+      // 未使用変数は _hitbox
+      this.physics.add.overlap(this.attackHitbox, enemy, (_hitbox, hitEnemy) => {
         const e = hitEnemy as Enemy; 
         if (!e.isDead) {
           e.takeDamage();
@@ -497,35 +507,24 @@ class MainScene extends Phaser.Scene {
   takeDamage(enemy: Enemy) {
     if (this.isInvincible || !this.isPlayerAlive || this.isGameClear) return;
 
-    // ★パリィ・ガード判定
     if (this.isBlocking) {
         const currentTime = this.time.now;
         const blockDuration = currentTime - this.blockStartTime;
 
-        // ジャストガード（0.2秒以内）
         if (blockDuration < 200) {
-            // パリィ成功！
             this.showParryEffect(this.player.x, this.player.y);
-            // 音を高くしてキンッ！という感じにする
             this.sound.play('se_hit', { volume: 1.0, rate: 2.0 }); 
-            
-            // 敵をよろけさせる
             enemy.getStunned();
-            
-            // 画面を一瞬止める（ヒットストップ）
             this.cameras.main.shake(100, 0.02);
-            return; // ダメージなしで終了
+            return;
         } else {
-            // 通常ガード（ダメージ無効だがノックバック）
-            this.sound.play('se_hit', { volume: 0.5, rate: 0.5 }); // 鈍い音
-            // ノックバックのみ受ける
+            this.sound.play('se_hit', { volume: 0.5, rate: 0.5 });
             const direction = this.player.x < enemy.x ? -1 : 1;
             this.player.setVelocityX(200 * direction);
             return;
         }
     }
 
-    // 通常ダメージ
     this.hp -= 20; 
     this.drawPlayerHealthBar();
     this.sound.play('se_hit', { volume: 0.5 });
@@ -550,7 +549,6 @@ class MainScene extends Phaser.Scene {
     });
   }
 
-  // ★パリィエフェクト
   showParryEffect(x: number, y: number) {
       const spark = this.add.circle(x, y, 50, 0xffffaa, 1);
       this.tweens.add({
@@ -560,7 +558,6 @@ class MainScene extends Phaser.Scene {
           duration: 200,
           onComplete: () => spark.destroy()
       });
-      // 文字も出す
       const text = this.add.text(x, y - 50, '弾き！', { 
           fontSize: '40px', 
           color: '#ffff00', 
@@ -653,7 +650,6 @@ class MainScene extends Phaser.Scene {
       .on('pointerout', () => { this.inputUp = false; });
     this.add.text(1180, 550, '跳', { fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
 
-    // ★防御ボタン（スマホ用）追加
     this.add.circle(1050, 500, btnRadius, 0xaaaa00, 0.5).setScrollFactor(0).setInteractive().setDepth(100)
       .on('pointerdown', () => { this.inputDown = true; })
       .on('pointerup', () => { this.inputDown = false; })
@@ -684,18 +680,17 @@ class MainScene extends Phaser.Scene {
     const left = this.cursors.left.isDown || this.inputLeft;
     const right = this.cursors.right.isDown || this.inputRight;
     const up = this.cursors.up.isDown || this.inputUp;
-    const down = this.cursors.down.isDown || this.inputDown; // 下入力
+    const down = this.cursors.down.isDown || this.inputDown; 
     const attack = (Phaser.Input.Keyboard.JustDown(this.spaceKey) || (this.inputAttack && !this.isAttacking));
 
-    // ★防御処理
     if (down && !this.isAttacking) {
         if (!this.isBlocking) {
             this.isBlocking = true;
             this.blockStartTime = this.time.now;
-            this.player.setTint(0xaaaaaa); // 防御中は少し暗く
+            this.player.setTint(0xaaaaaa); 
         }
-        this.player.setVelocityX(0); // 防御中は動けない
-        return; // 他の動作をキャンセル
+        this.player.setVelocityX(0); 
+        return; 
     } else {
         if (this.isBlocking) {
             this.isBlocking = false;
