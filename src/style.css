@@ -6,29 +6,26 @@ body, html {
   height: 100%;
   background-color: #000000;
   overflow: hidden;
-  touch-action: none; /* スマホ誤操作防止 */
+  touch-action: none; /* スマホでの誤操作防止 */
+  /* テキスト選択の無効化 */
+  user-select: none;
+  -webkit-user-select: none;
   font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
-  
-  /* 画面中央に配置 */
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  position: fixed; /* iOSでの画面揺れ防止 */
 }
 
 #app {
   width: 100%;
   height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  /* Flexboxなどの配置指定は削除し、Phaserの自動配置に任せます */
 }
 
-/* ★重要：キャンバスを画面サイズに合わせて引き伸ばす */
+/* ★修正：canvasへのサイズ強制を削除 */
 canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain; /* アスペクト比を維持したまま最大化 */
+  /* width: 100% !important;  <-- これがズレの原因でした */
+  /* height: 100% !important; <-- これも削除 */
+  /* object-fit: contain;     <-- これも削除 */
 }
 
 /* UIレイヤー */
@@ -58,7 +55,6 @@ canvas {
   color: #fff;
   pointer-events: auto;
   position: relative;
-  user-select: none;
   display: flex;
   flex-direction: column;
 }

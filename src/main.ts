@@ -253,11 +253,9 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   protected die() {
-    // ★ここが修正ポイント：シーンの参照を先に確保し、演出を先に呼ぶ
     const scene = this.scene as MainScene;
     this.isDead = true;
 
-    // 演出系（フリーズしない安全な処理）
     if (scene) {
         scene.triggerHitStop(150);
         scene.triggerVibration(100);
@@ -273,7 +271,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     
     this.play('death', true);
 
-    // ★危険な処理（スコア加算→自分消去の可能性）は最後に呼ぶ
     if (scene) {
         scene.addScore(100);
     }
@@ -314,7 +311,6 @@ class BossEnemy extends Enemy {
     }
 
     protected die() {
-        // ★ボスも同様に修正
         const scene = this.scene as MainScene;
         this.isDead = true;
 
@@ -334,7 +330,6 @@ class BossEnemy extends Enemy {
         
         this.play('death', true);
 
-        // イベント進行（最後に呼ぶ）
         if (scene) {
             scene.addScore(1000);
             scene.onBossDefeated();
@@ -399,7 +394,6 @@ class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    // 画像
     this.load.spritesheet('player_idle', '/assets/Idle.png', { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet('player_run', '/assets/Run.png', { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet('player_jump', '/assets/Jump.png', { frameWidth: 200, frameHeight: 200 });
@@ -416,10 +410,9 @@ class MainScene extends Phaser.Scene {
     this.load.audio('se_hit', '/assets/sounds/hit.mp3');
     this.load.audio('se_jump', '/assets/sounds/jump.mp3');
 
-    // パーティクル用
     const graphics = this.make.graphics({ x: 0, y: 0 });
     graphics.fillStyle(0xffffff);
-    graphics.fillRect(0, 0, 4, 4); // 4x4のドット
+    graphics.fillRect(0, 0, 4, 4); 
     graphics.generateTexture('pixel', 4, 4);
     graphics.destroy(); 
   }
@@ -865,7 +858,8 @@ class MainScene extends Phaser.Scene {
 
   createController() {
     this.input.addPointer(3); 
-    const btnRadius = 40;
+    // ★修正：ボタンサイズを大きく(40 -> 50)して押しやすく
+    const btnRadius = 50;
     
     const createBtn = (x: number, y: number, color: number, text: string, callback: (isDown: boolean) => void) => {
         const btn = this.add.circle(x, y, btnRadius, color, 0.5)
@@ -890,11 +884,12 @@ class MainScene extends Phaser.Scene {
         return btn;
     };
 
-    createBtn(100, 600, 0x888888, '←', (isDown) => { this.inputLeft = isDown; });
-    createBtn(220, 600, 0x888888, '→', (isDown) => { this.inputRight = isDown; });
-    createBtn(1050, 600, 0xff0000, '斬', (isDown) => { this.inputAttack = isDown; });
-    createBtn(1180, 550, 0x0000ff, '跳', (isDown) => { this.inputUp = isDown; });
-    createBtn(1050, 500, 0xaaaa00, '防', (isDown) => { this.inputDown = isDown; });
+    // ★修正：ボタン位置の間隔を広げた（サイズアップに対応）
+    createBtn(110, 600, 0x888888, '←', (isDown) => { this.inputLeft = isDown; });
+    createBtn(240, 600, 0x888888, '→', (isDown) => { this.inputRight = isDown; });
+    createBtn(1080, 600, 0xff0000, '斬', (isDown) => { this.inputAttack = isDown; });
+    createBtn(1200, 500, 0x0000ff, '跳', (isDown) => { this.inputUp = isDown; });
+    createBtn(1080, 480, 0xaaaa00, '防', (isDown) => { this.inputDown = isDown; });
   }
 
   update() {
