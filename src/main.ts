@@ -233,7 +233,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp--;
     this.drawHealthBar();
 
-    // ダメージ演出
     const scene = this.scene as MainScene;
     if (scene) {
         scene.createBloodEffect(this.x, this.y);
@@ -254,15 +253,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   protected die() {
-    // ★修正：まず死亡フラグを立てる（これでaddScore時のcleanupから守られる）
+    // ★ここが修正ポイント：シーンの参照を先に確保し、演出を先に呼ぶ
+    const scene = this.scene as MainScene;
     this.isDead = true;
 
-    // シーンへの参照を確保
-    const scene = this.scene as MainScene;
-    
-    // スコア加算や演出
+    // 演出系（フリーズしない安全な処理）
     if (scene) {
-        scene.addScore(100);
         scene.triggerHitStop(150);
         scene.triggerVibration(100);
         scene.sound.play('se_hit', { volume: 1.5 });
@@ -275,7 +271,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     this.attackHitbox.body!.enable = false; 
     
-    this.play('death', true); 
+    this.play('death', true);
+
+    // ★危険な処理（スコア加算→自分消去の可能性）は最後に呼ぶ
+    if (scene) {
+        scene.addScore(100);
+    }
   }
 
   getStunned() {
@@ -313,17 +314,15 @@ class BossEnemy extends Enemy {
     }
 
     protected die() {
-        // ★修正：こちらも同様にisDeadを最初に
+        // ★ボスも同様に修正
+        const scene = this.scene as MainScene;
         this.isDead = true;
 
-        const scene = this.scene as MainScene;
         if (scene) {
-            scene.addScore(1000);
             scene.triggerHitStop(300);
             scene.triggerVibration(500);
             scene.cameras.main.flash(500, 255, 255, 255);
             scene.sound.play('se_hit', { volume: 2.0 });
-            scene.onBossDefeated();
         }
 
         this.setVelocity(0, 0);
@@ -334,6 +333,12 @@ class BossEnemy extends Enemy {
         this.attackHitbox.body!.enable = false; 
         
         this.play('death', true);
+
+        // イベント進行（最後に呼ぶ）
+        if (scene) {
+            scene.addScore(1000);
+            scene.onBossDefeated();
+        }
     }
 }
 
@@ -682,7 +687,6 @@ class MainScene extends Phaser.Scene {
               this.wave = 2;
               this.spawnTimer.paused = true; 
               this.enemies.forEach(e => {
-                  // ★修正：生き残っている敵を消す時も、死んだことにはしない
                   if (!e.isDead) {
                       e.destroy();
                   }
