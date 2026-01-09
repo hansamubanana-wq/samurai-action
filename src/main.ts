@@ -234,14 +234,17 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.drawHealthBar();
 
     // ダメージ演出
-    (this.scene as MainScene).createBloodEffect(this.x, this.y);
-    (this.scene as MainScene).triggerHitStop(50);
-    (this.scene as MainScene).triggerVibration(30);
+    const scene = this.scene as MainScene;
+    if (scene) {
+        scene.createBloodEffect(this.x, this.y);
+        scene.triggerHitStop(50);
+        scene.triggerVibration(30);
+    }
 
     if (this.hp <= 0) {
         this.die();
     } else {
-        this.scene.sound.play('se_hit', { volume: 1.2 });
+        if (scene) scene.sound.play('se_hit', { volume: 1.2 });
         this.setTint(0xffaaaa);
         this.scene.time.delayedCall(100, () => this.setTint(0xff5555));
         const backDir = this.flipX ? 1 : -1;
@@ -251,12 +254,20 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   protected die() {
-    (this.scene as MainScene).addScore(100);
-    
-    (this.scene as MainScene).triggerHitStop(150);
-    (this.scene as MainScene).triggerVibration(100);
-
+    // ★修正：まず死亡フラグを立てる（これでaddScore時のcleanupから守られる）
     this.isDead = true;
+
+    // シーンへの参照を確保
+    const scene = this.scene as MainScene;
+    
+    // スコア加算や演出
+    if (scene) {
+        scene.addScore(100);
+        scene.triggerHitStop(150);
+        scene.triggerVibration(100);
+        scene.sound.play('se_hit', { volume: 1.5 });
+    }
+
     this.setVelocity(0, 0);
     if (this.body) {
         this.body.checkCollision.none = true; 
@@ -264,7 +275,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     this.attackHitbox.body!.enable = false; 
     
-    this.scene.sound.play('se_hit', { volume: 1.5 });
     this.play('death', true); 
   }
 
@@ -303,23 +313,27 @@ class BossEnemy extends Enemy {
     }
 
     protected die() {
-        (this.scene as MainScene).addScore(1000);
-        
-        (this.scene as MainScene).triggerHitStop(300);
-        (this.scene as MainScene).triggerVibration(500);
-        (this.scene as MainScene).cameras.main.flash(500, 255, 255, 255);
-
+        // ★修正：こちらも同様にisDeadを最初に
         this.isDead = true;
+
+        const scene = this.scene as MainScene;
+        if (scene) {
+            scene.addScore(1000);
+            scene.triggerHitStop(300);
+            scene.triggerVibration(500);
+            scene.cameras.main.flash(500, 255, 255, 255);
+            scene.sound.play('se_hit', { volume: 2.0 });
+            scene.onBossDefeated();
+        }
+
         this.setVelocity(0, 0);
         if (this.body) {
             this.body.checkCollision.none = true; 
             (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
         }
         this.attackHitbox.body!.enable = false; 
-        this.scene.sound.play('se_hit', { volume: 2.0 });
-        this.play('death', true);
         
-        (this.scene as MainScene).onBossDefeated();
+        this.play('death', true);
     }
 }
 
@@ -397,12 +411,12 @@ class MainScene extends Phaser.Scene {
     this.load.audio('se_hit', '/assets/sounds/hit.mp3');
     this.load.audio('se_jump', '/assets/sounds/jump.mp3');
 
-    // ★修正：パーティクル用の「白い四角」生成（add: false を削除）
+    // パーティクル用
     const graphics = this.make.graphics({ x: 0, y: 0 });
     graphics.fillStyle(0xffffff);
     graphics.fillRect(0, 0, 4, 4); // 4x4のドット
     graphics.generateTexture('pixel', 4, 4);
-    graphics.destroy(); // 生成したら消す
+    graphics.destroy(); 
   }
 
   create() {
@@ -636,7 +650,6 @@ class MainScene extends Phaser.Scene {
   setupEnemyCollision(enemy: Enemy) {
       this.physics.add.collider(enemy, this.platforms);
       
-      // 未使用引数はアンダースコアでエラー回避
       this.physics.add.overlap(this.attackHitbox, enemy, (_hitbox, hitEnemy) => {
         const e = hitEnemy as Enemy; 
         if (!e.isDead) {
@@ -669,6 +682,7 @@ class MainScene extends Phaser.Scene {
               this.wave = 2;
               this.spawnTimer.paused = true; 
               this.enemies.forEach(e => {
+                  // ★修正：生き残っている敵を消す時も、死んだことにはしない
                   if (!e.isDead) {
                       e.destroy();
                   }

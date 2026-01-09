@@ -4,15 +4,88 @@ body, html {
   padding: 0;
   width: 100%;
   height: 100%;
-  background-color: #000000; /* 余白部分は黒にする */
-  overflow: hidden; /* スクロールバーを消す */
-  touch-action: none; /* スマホでの誤タップ（拡大など）を防ぐ */
+  background-color: #000000;
+  overflow: hidden; /* スクロールバー削除 */
+  touch-action: none; /* スマホ誤操作防止 */
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; /* 和風フォント */
+  position: fixed; /* ★重要：iOSなどで画面が揺れるのを防ぐ */
 }
 
 #app {
   width: 100%;
   height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+canvas {
+  display: block; /* キャンバスの下に隙間ができないように */
+}
+
+/* UIレイヤー：ゲーム画面の上に被せる透明な膜 */
+#ui-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* UI以外の場所はクリックを透過させる */
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-end; /* 下揃え */
+  z-index: 100; /* ゲーム画面より手前に */
+}
+
+/* 会話ウィンドウ本体 */
+#dialog-box {
+  width: 80%;
+  max-width: 800px;
+  height: 150px;
+  background: rgba(0, 0, 0, 0.85); /* 濃い黒の半透明 */
+  border: 2px solid #555;
+  border-radius: 4px;
+  margin-bottom: 20px; /* 下からの距離 */
+  padding: 20px;
+  color: #fff;
+  pointer-events: auto; /* ここだけはクリック可能にする */
+  position: relative;
+  user-select: none; /* 文字選択させない */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 名前表示エリア */
+#dialog-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffcc00; /* 金色っぽい色 */
+  margin-bottom: 10px;
+}
+
+/* セリフ表示エリア */
+#dialog-text {
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+/* 「次へ」アイコン */
+#dialog-next {
+  position: absolute;
+  bottom: 15px;
+  right: 20px;
+  animation: bounce 1s infinite;
+  font-size: 20px;
+  color: #ffcc00;
+}
+
+/* 非表示にするクラス */
+.hidden {
+  display: none !important;
+}
+
+/* ▼がふわふわ動くアニメーション */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
 }
